@@ -1,0 +1,15 @@
+/docs/
+/lib/
+/bin/
+/.shards/
+*.dwarf
+shard.lock
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store

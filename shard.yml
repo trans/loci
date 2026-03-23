@@ -1,0 +1,14 @@
+name: loci
+version: 0.1.0
+description: Unified code intelligence interface — LSP with ctags fallback
+
+authors:
+  - Thomas Sawyer <transfire@gmail.com>
+
+targets:
+  loci:
+    main: src/loci.cr
+
+crystal: '>= 1.18.2'
+
+license: MIT
