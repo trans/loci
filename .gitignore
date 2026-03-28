@@ -1,9 +1,11 @@
 /docs/
 /lib/
-/bin/
+/bin/*
+!/bin/*.cr
 /.shards/
 *.dwarf
 shard.lock
+tags
 
 # IDE/editor
 .vscode/

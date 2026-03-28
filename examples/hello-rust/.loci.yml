@@ -1,0 +1,7 @@
+ctags:
+  exclude:
+    - target
+  file: tags
+
+lsp:
+  command: "rust-analyzer"

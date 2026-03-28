@@ -1,119 +1,119 @@
-# query-ctags
+# Loci
 
-A fast ctags query tool for navigating codebases. Parse and query ctags files to find symbol definitions, list functions, and understand code structure.
+Unified code intelligence interface. Queries LSP servers with automatic ctags fallback. Works with any language.
 
 ## Features
 
-- 🔍 Find symbol definitions by name
-- 🔎 Search symbols by pattern (regex)
-- 📁 List all symbols in a file
-- 🏷️ Filter symbols by kind (function, class, method, etc.)
-- 📊 List all available kinds and files
-- ⚡ Fast parsing and querying
+- LSP-first symbol lookup with ctags fallback
+- Auto-generates and refreshes ctags when source files change
+- Respects `.gitignore` for smart file exclusions
+- Configurable via `.loci.yml`
+- Works with any LSP server (rust-analyzer, solargraph, pyright, gopls, etc.)
 
 ## Installation
-
-### Build from source
-
-```bash
-crystal build src/query-ctags.cr --release -o bin/query-ctags
-```
-
-### Run with Crystal
-
-```bash
-crystal run src/query-ctags.cr -- [options]
-```
-
-## Usage
-
-### Basic commands
-
-Find a symbol by exact name:
-```bash
-./bin/query-ctags --name authenticate_user
-```
-
-Search for symbols matching a pattern:
-```bash
-./bin/query-ctags --search "auth.*user"
-```
-
-List all symbols in a file:
-```bash
-./bin/query-ctags --file src/auth.cr
-```
-
-Filter by kind (f=function, c=class, m=method, etc.):
-```bash
-./bin/query-ctags --kind c
-```
-
-List all available kinds:
-```bash
-./bin/query-ctags --list-kinds
-```
-
-List all files with tags:
-```bash
-./bin/query-ctags --list-files
-```
-
-### Options
-
-- `--tags=FILE` - Path to tags file (default: `tags`)
-- `--name=NAME` - Find exact tag by name
-- `--search=PATTERN` - Search tags by regex pattern (case-insensitive)
-- `--file=FILE` - List all tags in file
-- `--kind=KIND` - Filter by kind (f, c, m, etc.)
-- `--list-kinds` - List all tag kinds in the tags file
-- `--list-files` - List all files with tags
-- `-h, --help` - Show help
-- `-v, --version` - Show version
-
-## Development
-
-### Running tests
-
-```bash
-crystal spec
-```
-
-### Building
 
 ```bash
 shards build
 ```
 
-## Tag File Format
+Or build a release binary:
 
-This tool works with standard ctags format (Exuberant/Universal Ctags). Example tag line:
-
-```
-authenticate_user	lib/auth.ex	/^  def authenticate_user(conn, credentials) do$/;"	f	line:42
+```bash
+crystal build bin/loci.cr --release -o bin/loci
 ```
 
-Format: `NAME<Tab>FILE<Tab>PATTERN;"<Tab>EXTENSIONS`
+Requires [Universal Ctags](https://ctags.io/) for the ctags provider.
 
-Common kind codes:
-- `f` - function
-- `c` - class
-- `m` - method
-- `v` - variable
-- `t` - type/typedef
-- `s` - struct
+## Usage
+
+Loci auto-generates ctags on first run. Just query:
+
+```bash
+loci --name authenticate_user
+loci --search "auth.*user"
+loci --file src/auth.cr
+loci --kind f
+loci --list-kinds
+loci --list-files
+```
+
+### With an LSP server
+
+```bash
+loci --lsp "rust-analyzer" --name Greeter
+loci --lsp "solargraph stdio" --search "authenticate"
+```
+
+LSP is tried first. If it returns no results or isn't available, ctags kicks in automatically.
+
+### Options
+
+```
+--tags=FILE      Path to tags file (default: tags)
+--lsp=COMMAND    LSP server command (e.g. "rust-analyzer")
+--root=DIR       Project root directory (default: current)
+--no-auto        Disable auto-generation of tags
+--name=NAME      Find exact symbol by name
+--search=PATTERN Search symbols by regex pattern
+--file=FILE      List all symbols in file
+--kind=KIND      Filter by kind (f, c, m, etc.)
+--list-kinds     List all symbol kinds
+--list-files     List all files with symbols
+-h, --help       Show help
+-v, --version    Show version
+```
+
+## Configuration
+
+Create a `.loci.yml` in your project root:
+
+```yaml
+ctags:
+  exclude:
+    - node_modules
+    - vendor
+  flags:
+    - "--languages=Crystal,Ruby"
+  file: tags
+  auto: true
+
+lsp:
+  command: "rust-analyzer"
+```
+
+All fields are optional. Sensible defaults are applied:
+
+- If `.gitignore` exists, its patterns are used for ctags exclusions
+- If no `.gitignore`, common directories are excluded automatically (node_modules, vendor, target, _build, etc.)
+- Auto-generation is enabled by default
+- CLI flags override config values
+
+## How It Works
+
+Loci uses a provider chain with fallback:
+
+1. **LSP provider** (if configured) — spawns an LSP server, communicates via JSON-RPC over stdio
+2. **Ctags provider** — parses standard ctags files (Universal/Exuberant Ctags format)
+
+If the first provider returns no results or fails, the next one is tried. The ctags provider auto-generates its tags file if missing, and regenerates when source files are newer than the tags file.
+
+## Development
+
+```bash
+just spec          # Run tests
+just build         # Build binary
+just release       # Build optimized binary
+just clean         # Remove build artifacts
+just tags          # Generate ctags for this project
+```
 
 ## Contributing
 
-1. Fork it (<https://github.com/your-github-user/query-ctags/fork>)
+1. Fork it (<https://github.com/trans/loci/fork>)
 2. Create your feature branch (`git checkout -b my-new-feature`)
 3. Commit your changes (`git commit -am 'Add some feature'`)
 4. Push to the branch (`git push origin my-new-feature`)
 5. Create a new Pull Request
-
-## Contributors
-
-- [Thomas Sawyer](https://github.com/your-github-user) - creator and maintainer
 
 ## License
 

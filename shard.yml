@@ -5,9 +5,13 @@ description: Unified code intelligence interface — LSP with ctags fallback
 authors:
   - Thomas Sawyer <transfire@gmail.com>
 
+dependencies:
+  ignore:
+    github: trans/ignore
+
 targets:
   loci:
-    main: src/loci.cr
+    main: bin/loci.cr
 
 crystal: '>= 1.18.2'
 
