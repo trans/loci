@@ -5,7 +5,6 @@ module Loci
     include YAML::Serializable
 
     property ctags : CtagsConfig = CtagsConfig.new
-    property lsp : LSPConfig = LSPConfig.new
     property entries : Array(String) = [] of String
 
     def initialize
@@ -36,14 +35,5 @@ module Loci
       end
     end
 
-    class LSPConfig
-      include YAML::Serializable
-
-      property command : String? = nil
-      property root : String? = nil
-
-      def initialize
-      end
-    end
   end
 end

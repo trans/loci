@@ -1,14 +1,14 @@
 # Loci
 
-Unified code intelligence interface. Queries LSP servers with automatic ctags fallback. Works with any language.
+Unified code intelligence interface. Fast, stateless symbol lookup with compiler-backed dead code detection and heuristic reference finding. Designed for AI coding agents and CLI workflows.
 
 ## Features
 
-- LSP-first symbol lookup with ctags fallback
-- Auto-generates and refreshes ctags when source files change
+- Fast symbol lookup via ctags (auto-generated, auto-refreshed)
+- Reference finding with heuristic classification (`--refs`)
+- Compiler-backed dead code detection (`--dead`)
 - Respects `.gitignore` for smart file exclusions
 - Configurable via `.loci.yml`
-- Works with any LSP server (rust-analyzer, solargraph, pyright, gopls, etc.)
 
 ## Installation
 
@@ -43,20 +43,10 @@ loci --refs authenticate_user --no-defs --limit=50
 loci --dead
 ```
 
-### With an LSP server
-
-```bash
-loci --lsp "rust-analyzer" --name Greeter
-loci --lsp "solargraph stdio" --search "authenticate"
-```
-
-LSP is tried first. If it returns no results or isn't available, ctags kicks in automatically.
-
 ### Options
 
 ```
 --tags=FILE      Path to tags file (default: tags)
---lsp=COMMAND    LSP server command (e.g. "rust-analyzer")
 --root=DIR       Project root directory (default: current)
 --no-auto        Disable auto-generation of tags
 --force          Regenerate tags before querying
@@ -88,9 +78,6 @@ ctags:
   file: tags
   auto: true
 
-lsp:
-  command: "rust-analyzer"
-
 entries:
   - bin/myapp.cr     # Entry points for --dead analysis (auto-detected if single bin/*.cr)
 ```
@@ -104,12 +91,7 @@ All fields are optional. Sensible defaults are applied:
 
 ## How It Works
 
-Loci uses a provider chain with fallback for symbol lookup:
-
-1. **Ctags provider** (default) — parses standard ctags files (Universal/Exuberant Ctags format)
-2. **LSP provider** (opt-in via `--lsp`) — spawns an LSP server, communicates via JSON-RPC over stdio
-
-If the first provider returns no results or fails, the next one is tried. The ctags provider auto-generates its tags file if missing, and regenerates when source files are newer than the tags file.
+**Symbol lookup** uses ctags (Universal/Exuberant Ctags format). The tags file is auto-generated on first run and regenerated when source files are newer than the tags file.
 
 ### Reference finding (`--refs`)
 
@@ -118,6 +100,20 @@ Resolves the target to definitions via ctags, then scans all project source file
 ### Dead code detection (`--dead`)
 
 For Crystal projects, shells out to `crystal tool unreachable` for compiler-backed dead code analysis. A built-in filter suppresses false positives from `JSON::Serializable` classes and enum JSON hooks. Requires `entries:` in config or a single `bin/*.cr` file for entry-point auto-detection.
+
+## Why not LSP?
+
+Loci intentionally does not use LSP. We tried it and removed it. Here's why:
+
+**LSP is designed for IDEs, not CLI tools.** LSP servers are long-running, stateful processes with significant startup cost (rust-analyzer can take 30+ seconds to index). Loci is a one-shot query tool — spawning, initializing, querying, and tearing down an LSP server for a single symbol lookup is the wrong cost model.
+
+**The unique value is narrow.** LSP offers definitions, references, hover, rename, diagnostics, and code actions. But ctags handles definitions faster. Heuristic grep handles references well enough for code navigation. And compiler-native tools (like `crystal tool unreachable`) handle dead code detection better than LSP can.
+
+**Each language's own toolchain is better.** Rather than a generic LSP client that handles every server's quirks, loci uses language-specific compiler tools directly. Crystal's `crystal tool` suite provides authoritative dead code analysis in under a second, with zero configuration. The same pattern extends to other languages — `go vet`, `cargo`, `pyright --outputjson` — each invoked statelessly.
+
+**Friction kills adoption.** When an AI coding agent tried loci with LSP, the server wasn't installed. The agent fell back to ctags, found it insufficient for references, and bailed to grep. The lesson: zero-setup tools get used, tools that require per-language server installation don't.
+
+LSP support existed in earlier versions of loci. If a future use case genuinely requires it, the implementation is preserved in git history (commit `1d12c02`).
 
 ## Development
 

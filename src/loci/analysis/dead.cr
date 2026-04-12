@@ -38,7 +38,7 @@ module Loci
       end
 
       # Parse tab-separated output:
-      #   src/loci/lsp/transport.cr:38:7\tLoci::LSP::Transport#request\t6 lines
+      #   src/foo.cr:38:7\tMyApp::Foo#bar\t6 lines
       def self.parse_crystal_output(text : String) : Array(Result)
         results = [] of Result
         text.each_line do |raw|

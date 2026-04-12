@@ -50,8 +50,7 @@ describe Loci do
       config.ctags.auto.should be_true
       config.ctags.exclude.should be_empty
       config.ctags.flags.should be_empty
-      config.lsp.command.should be_nil
-      config.lsp.root.should be_nil
+      config.entries.should be_empty
     end
 
     it "loads from a YAML file" do
@@ -64,8 +63,8 @@ describe Loci do
           - "--languages=Crystal"
         file: custom_tags
         auto: false
-      lsp:
-        command: "solargraph stdio"
+      entries:
+        - bin/myapp.cr
       YAML
 
       Dir.mkdir_p("spec/test_config")
@@ -76,7 +75,7 @@ describe Loci do
       config.ctags.auto.should be_false
       config.ctags.exclude.should eq ["node_modules", "vendor"]
       config.ctags.flags.should eq ["--languages=Crystal"]
-      config.lsp.command.should eq "solargraph stdio"
+      config.entries.should eq ["bin/myapp.cr"]
 
       File.delete("spec/test_config/.loci.yml")
       Dir.delete("spec/test_config")
@@ -95,7 +94,7 @@ describe Loci do
       config.ctags.file.should eq "my_tags"
       config.ctags.auto.should be_true
       config.ctags.exclude.should be_empty
-      config.lsp.command.should be_nil
+      config.entries.should be_empty
 
       File.delete("spec/test_config/.loci.yml")
       Dir.delete("spec/test_config")

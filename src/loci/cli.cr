@@ -22,7 +22,6 @@ module Loci
   class CLI
     def self.run(args : Array(String))
       tags_file_override = nil
-      lsp_command = nil
       root_dir = Dir.current
       no_auto = false
       force_tags = false
@@ -39,7 +38,6 @@ module Loci
         opts.banner = "Usage: loci [options]"
 
         opts.on("--tags=FILE", "Path to tags file (default: tags)") { |f| tags_file_override = f }
-        opts.on("--lsp=COMMAND", "LSP server command (e.g. \"rust-analyzer\")") { |c| lsp_command = c }
         opts.on("--root=DIR", "Project root directory (default: current)") { |d| root_dir = d }
         opts.on("--no-auto", "Disable auto-generation of tags") { no_auto = true }
         opts.on("--force", "Regenerate tags before querying") { force_tags = true }
@@ -80,19 +78,8 @@ module Loci
                   else
                     config.ctags.file
                   end
-      lsp_command ||= config.lsp.command
-      root_dir = config.lsp.root || root_dir
 
-      # Build provider chain — LSP first, ctags second
       providers = [] of Provider
-
-      if cmd = lsp_command
-        begin
-          providers << LSP::Provider.new(cmd, root_dir)
-        rescue ex
-          STDERR.puts "Warning: LSP server failed to start: #{ex.message}"
-        end
-      end
 
       # Auto-generate/refresh ctags if enabled
       auto = config.ctags.auto && !no_auto
@@ -111,7 +98,7 @@ module Loci
       end
 
       if providers.empty?
-        STDERR.puts "Error: No providers available. Provide --lsp, a tags file, or install ctags."
+        STDERR.puts "Error: No providers available. Provide a tags file or install ctags."
         exit 1
       end
 

@@ -1,6 +1,6 @@
 # Loci
 
-Unified code intelligence interface — ctags-first with LSP opt-in, plus compiler-backed dead code detection and heuristic reference finding.
+Unified code intelligence interface — ctags + compiler-backed dead code detection + heuristic reference finding. No LSP.
 
 - Language: Crystal (>= 1.18.2)
 - Build: `shards build`
