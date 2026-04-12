@@ -15,6 +15,7 @@ module Loci
       @stdin : IO
       @stdout : IO
       @next_id : Int32 = 0
+      @closed : Bool = false
 
       def initialize(command : String)
         @process = Process.new(command, shell: true,
@@ -56,8 +57,16 @@ module Loci
       end
 
       def close : Nil
-        @stdin.close
-        @process.wait
+        return if @closed
+        @closed = true
+        begin
+          @stdin.close
+        rescue
+        end
+        begin
+          @process.wait
+        rescue
+        end
       end
 
       private def next_id : Int32

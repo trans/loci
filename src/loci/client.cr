@@ -27,6 +27,15 @@ module Loci
       try_string_providers(&.list_files)
     end
 
+    def close : Nil
+      @providers.each do |provider|
+        begin
+          provider.close
+        rescue
+        end
+      end
+    end
+
     private def try_providers(& : Provider -> Array(Symbol)) : Array(Symbol)
       @providers.each do |provider|
         begin

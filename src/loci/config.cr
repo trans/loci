@@ -6,6 +6,7 @@ module Loci
 
     property ctags : CtagsConfig = CtagsConfig.new
     property lsp : LSPConfig = LSPConfig.new
+    property entries : Array(String) = [] of String
 
     def initialize
     end

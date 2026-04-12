@@ -35,8 +35,15 @@ module Loci
           raise "ctags not found in PATH"
         end
 
-        cmd = build_command(@config.ctags.file)
-        result = Process.run(cmd, shell: true, chdir: @root_dir,
+        source_files = collect_source_files
+        if source_files.empty?
+          File.write(tags_path, "")
+          return tags_path
+        end
+
+        args = build_args(@config.ctags.file)
+        input = IO::Memory.new(source_files.join('\n') + "\n")
+        result = Process.run("ctags", args: args, input: input, chdir: @root_dir,
           error: Process::Redirect::Pipe)
 
         unless result.success?
@@ -88,7 +95,7 @@ module Loci
       private def newest_source_mtime : Time?
         newest = nil
 
-        scan_directory(@root_dir) do |mtime|
+        each_source_file(@root_dir) do |_, mtime|
           if newest.nil? || mtime > newest.not_nil!
             newest = mtime
           end
@@ -97,7 +104,17 @@ module Loci
         newest
       end
 
-      private def scan_directory(dir : String, &block : Time ->) : Nil
+      private def collect_source_files : Array(String)
+        files = [] of String
+
+        each_source_file(@root_dir) do |rel_path, _|
+          files << rel_path
+        end
+
+        files.sort!
+      end
+
+      private def each_source_file(dir : String, &block : String, Time ->) : Nil
         Dir.each_child(dir) do |entry|
           path = File.join(dir, entry)
           # Use path relative to root for ignore matching
@@ -105,54 +122,26 @@ module Loci
 
           if Dir.exists?(path)
             next if @ignore.ignores?(rel_path + "/")
-            scan_directory(path, &block)
+            each_source_file(path, &block)
           elsif File.file?(path)
             next if entry == @config.ctags.file
             next if @ignore.ignores?(rel_path)
-            yield File.info(path).modification_time
+            yield rel_path, File.info(path).modification_time
           end
         end
       rescue ex : File::AccessDeniedError
         # Skip directories we can't read
       end
 
-      private def build_command(tags_path : String) : String
-        parts = ["ctags", "-R"]
-        parts << "-f" << tags_path
-
-        # Use .gitignore patterns for exclusions if available
-        gitignore_path = File.join(@root_dir, ".gitignore")
-        if File.exists?(gitignore_path)
-          # Extract top-level directory patterns from .gitignore for ctags --exclude
-          File.each_line(gitignore_path) do |line|
-            line = line.strip
-            next if line.empty? || line.starts_with?("#") || line.starts_with?("!")
-            # Strip leading/trailing slashes for ctags --exclude compatibility
-            pattern = line.lstrip("/").chomp("/")
-            next if pattern.empty?
-            parts << "--exclude=#{pattern}"
-          end
-        else
-          # Fallback: exclude common dirs that exist
-          FALLBACK_EXCLUDE.each do |dir|
-            if Dir.exists?(File.join(@root_dir, dir))
-              parts << "--exclude=#{dir}"
-            end
-          end
-        end
-
-        # User-configured exclusions (always applied)
-        @config.ctags.exclude.each do |dir|
-          parts << "--exclude=#{dir}"
-        end
+      private def build_args(tags_path : String) : Array(String)
+        args = ["-f", tags_path, "--fields=+n", "-L", "-"]
 
         # User-configured extra flags
         @config.ctags.flags.each do |flag|
-          parts << flag
+          args << flag
         end
 
-        parts << "."
-        parts.join(" ")
+        args
       end
     end
   end

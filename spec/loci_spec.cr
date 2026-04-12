@@ -372,6 +372,302 @@ describe Loci do
         generator.stale?(tags_path).should be_true
       end
     end
+
+    it "respects nested .gitignore exclusions during generation" do
+      with_test_project do |dir|
+        Dir.mkdir_p(File.join(dir, "frontend/node_modules/pkg"))
+        Dir.mkdir_p(File.join(dir, "frontend/src"))
+        File.write(File.join(dir, "frontend/.gitignore"), "node_modules\n")
+        File.write(File.join(dir, "frontend/src/app.js"), "function keepMe() {}\n")
+        File.write(File.join(dir, "frontend/node_modules/pkg/ignored.js"), "function skipMe() {}\n")
+
+        config = Loci::Config.new
+        generator = Loci::Ctags::Generator.new(dir, config)
+        tags_path = generator.generate
+        tags = File.read(tags_path)
+
+        tags.should contain "keepMe"
+        tags.should_not contain "skipMe"
+      end
+    end
+  end
+
+  describe Loci::Analysis::Dead do
+    it "parses crystal tool unreachable output" do
+      output = <<-OUT
+      src/foo.cr:10:5\tMyApp::Foo#bar\t3 lines
+      src/baz.cr:42:7\tMyApp::Baz#qux\t10 lines
+      OUT
+
+      results = Loci::Analysis::Dead.parse_crystal_output(output)
+      results.size.should eq 2
+
+      results[0].file.should eq "src/foo.cr"
+      results[0].line.should eq 10
+      results[0].col.should eq 5
+      results[0].scope.should eq "MyApp::Foo"
+      results[0].name.should eq "bar"
+      results[0].kind.should eq "method"
+      results[0].size.should eq 3
+
+      results[1].file.should eq "src/baz.cr"
+      results[1].line.should eq 42
+      results[1].name.should eq "qux"
+      results[1].size.should eq 10
+    end
+
+    it "handles class methods in qualified names" do
+      scope, name, kind = Loci::Analysis::Dead.parse_qualified("MyApp::Foo.create")
+      scope.should eq "MyApp::Foo"
+      name.should eq "create"
+      kind.should eq "class_method"
+    end
+
+    it "handles top-level defs" do
+      scope, name, kind = Loci::Analysis::Dead.parse_qualified("main")
+      scope.should be_nil
+      name.should eq "main"
+      kind.should eq "def"
+    end
+
+    it "skips malformed lines" do
+      output = <<-OUT
+      not a valid line
+      also\tinvalid
+      src/ok.cr:1:1\tFoo#bar\t2 lines
+      OUT
+
+      results = Loci::Analysis::Dead.parse_crystal_output(output)
+      results.size.should eq 1
+      results[0].name.should eq "bar"
+    end
+  end
+
+  describe Loci::Analysis::JsonSerializableFilter do
+    it "filters initialize in JSON::Serializable classes" do
+      with_test_project do |dir|
+        File.write(File.join(dir, "src/example.cr"), <<-CR
+        class Foo
+          include JSON::Serializable
+          property name : String
+
+          def initialize(@name : String)
+          end
+        end
+        CR
+        )
+
+        results = [
+          Loci::Analysis::Dead::Result.new(
+            file: "src/example.cr", line: 5, col: 5,
+            scope: "Foo", name: "initialize", kind: "method", size: 2
+          ),
+        ]
+
+        filter = Loci::Analysis::JsonSerializableFilter.new(dir)
+        filtered = filter.filter(results)
+        filtered.should be_empty
+      end
+    end
+
+    it "keeps initialize in non-serializable classes" do
+      with_test_project do |dir|
+        File.write(File.join(dir, "src/example.cr"), <<-CR
+        class Foo
+          property name : String
+
+          def initialize(@name : String)
+          end
+        end
+        CR
+        )
+
+        results = [
+          Loci::Analysis::Dead::Result.new(
+            file: "src/example.cr", line: 4, col: 5,
+            scope: "Foo", name: "initialize", kind: "method", size: 2
+          ),
+        ]
+
+        filter = Loci::Analysis::JsonSerializableFilter.new(dir)
+        filtered = filter.filter(results)
+        filtered.size.should eq 1
+      end
+    end
+
+    it "filters enum JSON methods" do
+      with_test_project do |dir|
+        File.write(File.join(dir, "src/example.cr"), <<-CR
+        enum Color
+          Red
+          Blue
+
+          def to_json(json : JSON::Builder) : Nil
+            json.number(value)
+          end
+        end
+        CR
+        )
+
+        results = [
+          Loci::Analysis::Dead::Result.new(
+            file: "src/example.cr", line: 5, col: 5,
+            scope: "Color", name: "to_json", kind: "method", size: 3
+          ),
+        ]
+
+        filter = Loci::Analysis::JsonSerializableFilter.new(dir)
+        filtered = filter.filter(results)
+        filtered.should be_empty
+      end
+    end
+
+    it "keeps non-reflection methods even in serializable classes" do
+      with_test_project do |dir|
+        File.write(File.join(dir, "src/example.cr"), <<-CR
+        class Foo
+          include JSON::Serializable
+          property name : String
+
+          def unused_helper
+          end
+        end
+        CR
+        )
+
+        results = [
+          Loci::Analysis::Dead::Result.new(
+            file: "src/example.cr", line: 5, col: 5,
+            scope: "Foo", name: "unused_helper", kind: "method", size: 2
+          ),
+        ]
+
+        filter = Loci::Analysis::JsonSerializableFilter.new(dir)
+        filtered = filter.filter(results)
+        filtered.size.should eq 1
+      end
+    end
+  end
+
+  describe Loci::Analysis::Refs do
+    it "finds references to a symbol across files" do
+      with_test_project do |dir|
+        File.write(File.join(dir, "src/foo.cr"), <<-CR
+        def greet(name)
+          puts "hello"
+        end
+        CR
+        )
+        File.write(File.join(dir, "src/bar.cr"), <<-CR
+        def main
+          greet("world")
+          # greet is great
+        end
+        CR
+        )
+
+        config = Loci::Config.new
+        generator = Loci::Ctags::Generator.new(dir, config)
+        generator.generate
+
+        tags_path = File.join(dir, config.ctags.file)
+        providers = [Loci::Ctags::Provider.new(tags_path)] of Loci::Provider
+        client = Loci::Client.new(providers)
+
+        finder = Loci::Analysis::Refs.new(dir, client)
+        result = finder.find("greet")
+
+        result.name.should eq "greet"
+        result.definitions.size.should eq 1
+
+        call_refs = result.references.select { |r| r.kind == "call" }
+        call_refs.any? { |r| r.file == "src/bar.cr" && r.snippet.includes?("greet(\"world\")") }.should be_true
+      end
+    end
+
+    it "filters comment lines" do
+      with_test_project do |dir|
+        File.write(File.join(dir, "src/foo.cr"), <<-CR
+        def greet
+        end
+        CR
+        )
+        File.write(File.join(dir, "src/bar.cr"), <<-CR
+        # greet is mentioned in a comment
+        greet
+        CR
+        )
+
+        config = Loci::Config.new
+        generator = Loci::Ctags::Generator.new(dir, config)
+        generator.generate
+
+        tags_path = File.join(dir, config.ctags.file)
+        providers = [Loci::Ctags::Provider.new(tags_path)] of Loci::Provider
+        client = Loci::Client.new(providers)
+
+        finder = Loci::Analysis::Refs.new(dir, client)
+        result = finder.find("greet", include_defs: false)
+
+        result.references.none? { |r| r.snippet.starts_with?("#") }.should be_true
+        result.references.size.should eq 1
+      end
+    end
+
+    it "classifies call vs ref vs def" do
+      with_test_project do |dir|
+        File.write(File.join(dir, "src/foo.cr"), <<-CR
+        class Greeter
+          def greet
+          end
+        end
+        CR
+        )
+        File.write(File.join(dir, "src/bar.cr"), <<-CR
+        x = Greeter.new
+        x.greet
+        val : Greeter = x
+        CR
+        )
+
+        config = Loci::Config.new
+        generator = Loci::Ctags::Generator.new(dir, config)
+        generator.generate
+
+        tags_path = File.join(dir, config.ctags.file)
+        providers = [Loci::Ctags::Provider.new(tags_path)] of Loci::Provider
+        client = Loci::Client.new(providers)
+
+        finder = Loci::Analysis::Refs.new(dir, client)
+        result = finder.find("Greeter", include_defs: false)
+
+        kinds = result.references.map(&.kind)
+        kinds.should contain "ref"   # Greeter.new and : Greeter are both refs
+        result.references.size.should eq 2
+      end
+    end
+
+    it "respects --limit" do
+      with_test_project do |dir|
+        lines = (1..10).map { |i| "greet_#{i}" }.join("\n")
+        File.write(File.join(dir, "src/foo.cr"), "def greet\nend\n")
+        File.write(File.join(dir, "src/bar.cr"), (1..10).map { "greet" }.join("\n"))
+
+        config = Loci::Config.new
+        generator = Loci::Ctags::Generator.new(dir, config)
+        generator.generate
+
+        tags_path = File.join(dir, config.ctags.file)
+        providers = [Loci::Ctags::Provider.new(tags_path)] of Loci::Provider
+        client = Loci::Client.new(providers)
+
+        finder = Loci::Analysis::Refs.new(dir, client)
+        result = finder.find("greet", limit: 3, include_defs: false)
+
+        result.references.size.should eq 3
+        result.total_matches.should eq 10
+      end
+    end
   end
 
   describe Loci::Client do

@@ -6,5 +6,8 @@ module Loci
     abstract def find_by_kind(kind : String) : Array(Symbol)
     abstract def list_kinds : Array(String)
     abstract def list_files : Array(String)
+
+    def close : Nil
+    end
   end
 end
