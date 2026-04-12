@@ -1,6 +1,6 @@
 name: loci
-version: 0.1.0
-description: Unified code intelligence interface — LSP with ctags fallback
+version: 0.2.0
+description: Unified code intelligence interface — ctags + compiler-backed analysis
 
 authors:
   - Thomas Sawyer <transfire@gmail.com>

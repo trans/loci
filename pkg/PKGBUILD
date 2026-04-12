@@ -1,0 +1,40 @@
+# Maintainer: trans
+pkgname=loci
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="Unified code intelligence interface — ctags + compiler-backed analysis"
+arch=('x86_64')
+url="https://github.com/trans/loci"
+license=('MIT')
+depends=(
+  'ctags'
+  'libyaml'
+  'pcre2'
+  'gc'          # boehm-gc
+  'gcc-libs'
+)
+makedepends=(
+  'crystal'
+  'shards'
+)
+optdepends=(
+  'crystal: dead code analysis via crystal tool unreachable'
+)
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "${pkgname}-${pkgver}"
+  shards install --production
+  crystal build --release --no-debug bin/loci.cr -o bin/loci
+}
+
+package() {
+  cd "${pkgname}-${pkgver}"
+
+  # Binary
+  install -Dm755 bin/loci "${pkgdir}/usr/bin/loci"
+
+  # License
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
